@@ -1,0 +1,1 @@
+[{"domain": "television.digital.gob.es", "expiry": 1784594024, "httpOnly": false, "name": "cookieAdvise", "path": "/", "sameSite": "Lax", "secure": true, "value": "1-1,1-2,2-1"}, {"domain": "television.digital.gob.es", "httpOnly": false, "name": "WSS_FullScreenMode", "path": "/", "sameSite": "Lax", "secure": false, "value": "false"}]

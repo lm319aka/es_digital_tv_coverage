@@ -1,10 +1,17 @@
-# COBERTURA TDT
-# https://television.digital.gob.es/2DD-5G/Paginas/Que-tengo-que-hacer.aspx
+"""
+Spanish Digital Terrestrial Television (DTT) Coverage Checker
+
+This module provides functionality to check DTT coverage information for Spanish postal codes
+using the official Spanish government website: https://television.digital.gob.es/
+
+It uses Selenium with undetected-chromedriver to automate web interactions and extract coverage data.
+"""
 import time
-from init_selenium.init_driver import *
+# import logging
 import pprint
-import json
+# import json
 import os
+from init_selenium.init_driver import *
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -13,39 +20,64 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
-# from typing import Any
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('tdtc.log')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 WEB_URL = "https://television.digital.gob.es/2DD-5G/Paginas/Que-tengo-que-hacer.aspx"
 
 
 def erase_keystrokes(dr: webdriver.Chrome, wt: WebDriverWait):
     """
-    Erase keystrokes in the input field.
+    Erase any existing keystrokes in the postal code input field.
+    
+    Args:
+        dr: Selenium WebDriver instance
+        wt: WebDriverWait instance for explicit waits
+        
+    Raises:
+        TimeoutException: If the input field is not found or not interactable
     """
-    # Wait for the element to be present
     try:
-        # Wait for the element to be present
+        # Wait for the postal code input field to be clickable and erase previous input
         wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(5 * Keys.BACKSPACE)
 
     except TimeoutException:
         raise TimeoutException("Coverage not found")
 
 
-def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait):
+def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait) -> tuple[str, str, list]:
     """
-    Extract coverage information from the TDT website when cp has been introduced.
+    Extract DTT coverage information from the website after a postal code has been searched.
+    
+    Args:
+        dr: Selenium WebDriver instance
+        wt: WebDriverWait instance for explicit waits
+        
+    Returns:
+        tuple: Contains (postal_code, population, coverage_data) where:
+            - postal_code (str): The postal code being queried
+            - population (str): The population center name
+            - coverage_data (list): List of tuples with (multiple_digital, center, channel) information
+            
+    Raises:
+        TimeoutException: If the coverage data elements are not found
     """
-    # Wait for the element to be present
     try:
-        # Wait for the element to be present
-        # cp_elem, pb = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "div.resultados")))[0].text.split(" ")[::2]
-        # print(f"Postal code: {cp}")
+        # Extract postal code and population information
         elems = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "div.resultados")))[0]
         cp_elem, pb_elem = elems.find_elements(By.CSS_SELECTOR, "dd")
         cp = cp_elem.text
         pb = pb_elem.text
 
-        print(f"Population: {pb}")
+        logger.info(f"Processing population: {pb}")
         try:
             mult_dig = [i.text for i in wt.until(
                 ec.presence_of_all_elements_located((By.CSS_SELECTOR, "td[headers='multiple-digital']")))]
@@ -54,7 +86,7 @@ def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait):
             chanel = [i.text for i in
                       wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "td[headers='canal']")))]
             ordered_data = list(zip(mult_dig, center, chanel))
-            pprint.pprint(ordered_data)
+            logger.debug(f"Coverage data: {pprint.pformat(ordered_data, width=120)}")
         except TimeoutException:
             ordered_data = []
         time.sleep(.1)
@@ -65,21 +97,39 @@ def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait):
         raise TimeoutException("Coverage not found")
 
 
-def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None):
+def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None) -> tuple[dict, webdriver.Chrome, WebDriverWait]:
     """
-    https://television.digital.gob.es/2DD-5G/Paginas/Que-tengo-que-hacer.aspx
+    Get DTT coverage information for a given Spanish postal code.
+    
+    Args:
+        cp (str): Spanish postal code (5 digits)
+        drivers (tuple, optional): Tuple containing (WebDriver, WebDriverWait) for reuse. 
+                                 If None, a new browser instance will be created.
+                                  
+    Returns:
+        tuple: (coverage_data, driver, wait) where:
+            - coverage_data (dict): Dictionary containing coverage information
+            - driver: Selenium WebDriver instance
+            - wait: WebDriverWait instance
+            
+    Raises:
+        AssertionError: If the postal code is not a valid Spanish postal code
     """
+    # Check if the postal code is valid and within the valid range
     assert 999 < int(cp) < 53000, "Invalid postal code"
-    # dr, wt = create_driver(window_size=MIN, undetectable=True)
+
+    # Create a new driver instance
     is_there_cookies = False
     if not drivers:
         cookies = None
-        # We cannot continue without cookies else program will crash
+        # We cannot continue without cookies or program will crash
+        # A cookies file is created after the first run automatically in the same directory
+        # TODO: tdtc_cookies.json is a very vage path, should be in a temp directory or user should specify directory
         try:
             with open("tdtc_cookies.json", "r") as f:
                 cookies = json.load(f)
                 is_there_cookies = True
-                print(cookies)
+                logger.debug("Loaded cookies from file")
         except FileNotFoundError:
             pass
 
@@ -95,23 +145,11 @@ def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None
 
     with open("tdtc_cookies.json", "w") as f:
         json.dump(dr.get_cookies(), f)
-    # try:
-    #     wt.until(ec.element_to_be_clickable((By.XPATH, "//button[.=Aceptar sólo necesarias']"))).click()
-    # except (NoSuchElementException, ElementClickInterceptedException):
-    #     print("No cookies button found or not clickable, continuing...")
 
+    # Start the process of searching for coverage data
     wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(str(cp))
-    # try:
 
     wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
-
-    # except ElementClickInterceptedException:
-    #     print("Element not clickable, trying again...")
-    #     time.sleep(.3)
-    #     wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
-
-    # if wt.until(ec.presence_of_element_located((By.XPATH, "//span[.='El texto introducido no corresponde a ningún Código Postal']"))):
-    #     print("Coverage found")
 
     try:
         ret_cp, ret_pb, ordered_data = extract_coverage_tdt(dr, wt)
@@ -122,57 +160,61 @@ def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None
                 [{"Population": ret_pb,
                   "Data": ordered_data}]
         }, dr, wt
+
+    # If TimeoutException occurs, it means there are multiple populations for the postal code
     except TimeoutException:
-        # try:
-        # selector = wt.until(ec.presence_of_element_located((By.ID, "cmbPoblaciones")))
         num_options = len(wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option"))))
-        # print(len(options))
-        # print(options)
 
         json_data = {
             "Postal code": cp,
             "Populations": []
         }
 
-        print("options:", num_options)
+        logger.info(f"Found {num_options} population options for postal code {cp}")
         for num in range(num_options):
             selector = wt.until(ec.presence_of_element_located((By.ID, "cmbPoblaciones")))
             options = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option")))
             option = options[num]
-            print(option.text)
+            logger.info(f"Processing option {num + 1}/{num_options}: {option.text}")
             selector.click()
             option.click()
             wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
             time.sleep(.2)
-            cp_ret, pb_ret, ordered_data = extract_coverage_tdt(dr, wt)
-            json_data["Populations"].append({
-                "Population": pb_ret,
-                "Data": ordered_data
-            })
+            try:
+                cp_ret, pb_ret, ordered_data = extract_coverage_tdt(dr, wt)
+                json_data["Populations"].append({
+                    "Population": pb_ret,
+                    "Data": ordered_data
+                })
+                logger.debug(f"Successfully processed population: {pb_ret}")
+            except Exception as e:
+                logger.error(f"Error processing population option {option.text}: {str(e)}")
             time.sleep(.1)
             dr.execute_script("window.history.back();")
-            # erase_keystrokes(dr, wt)
-        print(json_data)
+        logger.debug(f"Final data for postal code {cp}: {json.dumps(json_data, ensure_ascii=False, indent=2)}")
         return json_data, dr, wt
 
-        # except Exception as e:
-        #     if not drivers:
-        #         dr.quit()
-        #     else:
-        #         return {}
 
-    # time.sleep(3)
-    # input("Press Enter to continue...")
-    # dr.quit()
-
-
-def get_all_coverage_data(output_file: str = "coverage_data.jsonl",
+def get_all_coverage_data(output_file: str,
+                          progress_file: str,
                           start: int = None,
-                          end: int = None,
-                          progress_file: str = "progress.txt") -> None:
+                          end: int = None
+                          ) -> None:
     """
-    Collects coverage data for postal codes in a given range and saves each result incrementally to a JSONL file.
-    Resumes from the last processed postal code if start is None and progress_file exists.
+    Collect DTT coverage data for a range of Spanish postal codes.
+    
+    This function processes postal codes sequentially, saving results to a JSONL file and
+    maintaining progress to allow resuming interrupted operations.
+    
+    Args:
+        output_file (str): Path to save the JSONL output file
+        start (int, optional): Starting postal code (inclusive). If None, will resume from progress file.
+        end (int, optional): Ending postal code (inclusive). Defaults to 52999.
+        progress_file (str): File to store progress for resuming interrupted operations.
+        
+    Note:
+        The function saves results incrementally, so even if interrupted, previously processed
+        postal codes will be preserved in the output file.
     """
     # Resume from the last ID in the progress file if start is None
     if start is None and os.path.exists(progress_file):
@@ -180,7 +222,7 @@ def get_all_coverage_data(output_file: str = "coverage_data.jsonl",
             last_id = f.read().strip()
             if last_id.isdigit():
                 start = int(last_id) + 1
-                print(f"Resuming from last postal code: {start}")
+                logger.info(f"Resuming from last processed postal code: {start}")
             else:
                 raise ValueError("Invalid data in progress file. Please check its contents.")
 
@@ -210,45 +252,18 @@ def get_all_coverage_data(output_file: str = "coverage_data.jsonl",
                 progress_f.write(str(postal_code))
 
             try:
-                print(f"Processing postal code: {postal_code_str}")
+                logger.info(f"Processing postal code: {postal_code_str}")
                 data, drr, wtt = coverage_tdt(postal_code_str, drivers=(drr, wtt))
 
                 if data:
                     # Write the data to the file as a JSON object
                     f.write(json.dumps(data, ensure_ascii=False) + "\n")
-                    print(f"Saved data for postal code: {postal_code_str}")
+                    logger.info(f"Successfully processed and saved data for postal code: {postal_code_str}")
 
             except TimeoutException:
-                print(f"Timeout for postal code: {postal_code_str}. Skipping...")
+                logger.warning(f"Timeout while processing postal code: {postal_code_str}. Skipping...")
+            except Exception as e:
+                logger.error(f"Unexpected error processing postal code {postal_code_str}: {str(e)}")
 
-    print(f"Data collection completed. Results saved to {output_file}")
-
-
-if __name__ == "__main__":
-    # Para todas las comunidades autonomas
-    # get_all_coverage_data("coverage_data.json")
-    data = coverage_tdt("01000")
-    print(data)
-    # Solo para Castilla y León
-    # castilla_y_leon_codes = {
-    #     "León": ["24000", "24999"],
-    #     "Salamanca": ["37000", "37999"],
-    #     "Valladolid": ["47000", "47999"],
-    #     "Zamora": ["49000", "49999"],
-    #     "Palencia": ["34000", "34999"],
-    #     "Soria": ["42000", "42999"],
-    #     "Ávila": ["05000", "05999"],
-    #     "Burgos": ["09000", "09999"],
-    #     "Segovia": ["40000", "40999"]
-    # }
-
-    # Collect data for all provinces and save to a JSON file
-    # all_data = {}
-    # for province, (a, b) in castilla_y_leon_codes.items():
-    #     print(f"Processing province: {province}")
-    #     get_all_coverage_data(
-    #         output_file="CYL_tdtc.json",  # Do not save to individual files
-    #         start=int(a),
-    #         end=int(b),
-    #         progress_file="progress_CYL.txt"
-    #     )
+    logger.info(f"Data collection completed. Results saved to {os.path.abspath(output_file)}")
+    logger.info(f"Logs are available in {os.path.abspath('tdtc.log')}")
