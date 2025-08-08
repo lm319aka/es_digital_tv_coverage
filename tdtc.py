@@ -17,7 +17,7 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 
 # Configure logging
@@ -50,7 +50,20 @@ def erase_keystrokes(dr: webdriver.Chrome, wt: WebDriverWait):
         wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(5 * Keys.BACKSPACE)
 
     except TimeoutException:
-        raise TimeoutException("Coverage not found")
+        time.sleep(.2)
+        try:
+            wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(5 * Keys.BACKSPACE)
+        except TimeoutException:
+            logger.error("Postal code input field not found or not interactable.")
+            #raise TimeoutException("Postal code input field not found or not interactable.")
+        #raise TimeoutException("Coverage not found")
+    except StaleElementReferenceException:
+        time.sleep(.2)
+        try:
+            wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(5 * Keys.BACKSPACE)
+        except StaleElementReferenceException:
+            logger.error("Postal code input field not found or not interactable.")
+        #raise TimeoutException("Postal code input field is stale or not interactable.")
 
 
 def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait) -> tuple[str, str, list]:
@@ -65,12 +78,13 @@ def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait) -> tuple[str, 
         tuple: Contains (postal_code, population, coverage_data) where:
             - postal_code (str): The postal code being queried
             - population (str): The population center name
-            - coverage_data (list): List of tuples with (multiple_digital, center, channel) information
+            - coverage_data (list): List of tuples with (multiple_digital, center, channel, first_option) information
             
     Raises:
         TimeoutException: If the coverage data elements are not found
     """
     try:
+        # dr.refresh()
         # Extract postal code and population information
         elems = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "div.resultados")))[0]
         cp_elem, pb_elem = elems.find_elements(By.CSS_SELECTOR, "dd")
@@ -83,13 +97,19 @@ def extract_coverage_tdt(dr: webdriver.Chrome, wt: WebDriverWait) -> tuple[str, 
                 ec.presence_of_all_elements_located((By.CSS_SELECTOR, "td[headers='multiple-digital']")))]
             center = [i.text for i in
                       wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "td[headers='centro']")))]
-            chanel = [i.text for i in
+            channel = [i.text for i in
                       wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "td[headers='canal']")))]
-            ordered_data = list(zip(mult_dig, center, chanel))
+            
+            first_op_len_code = 'return document.getElementsByClassName("datos")[0].getElementsByTagName("tbody")[0].getElementsByTagName("tr").length'
+            first_op_len = dr.execute_script(first_op_len_code)
+            first_op_list = [True for _ in range(first_op_len)] + [False for _ in range(len(channel) - first_op_len)]
+
+            ordered_data = list(zip(mult_dig, center, channel, first_op_list))
+
             logger.debug(f"Coverage data: {pprint.pformat(ordered_data, width=120)}")
         except TimeoutException:
             ordered_data = []
-        time.sleep(.1)
+        # time.sleep(.1)
 
         return cp, pb, ordered_data
 
@@ -116,7 +136,7 @@ def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None
         AssertionError: If the postal code is not a valid Spanish postal code
     """
     # Check if the postal code is valid and within the valid range
-    assert 999 < int(cp) < 53000, "Invalid postal code"
+    assert 999 < int(cp) < 53000, f"Invalid postal code: {cp}"
 
     # Create a new driver instance
     is_there_cookies = False
@@ -133,66 +153,86 @@ def coverage_tdt(cp: str, drivers: tuple[webdriver.Chrome, WebDriverWait] = None
         except FileNotFoundError:
             pass
 
-        dr, wt = create_driver(window_size=WINDOW_MAX, undetectable=True, wait_time=3, cookies=cookies,
+        dr, wt = create_driver(window_size=WINDOW_MAX, undetectable=True, wait_time=2, cookies=cookies,
                                initial_url=WEB_URL)
     else:
         dr, wt = drivers
         erase_keystrokes(dr, wt)
-    time.sleep(.2)
+    # time.sleep(.2)
 
     if not is_there_cookies:
-        wt.until(ec.element_to_be_clickable((By.CSS_SELECTOR, "button[data-cookies-action='acceptAll']"))).click()
+        try:
+            wt.until(ec.element_to_be_clickable((By.CSS_SELECTOR, "button[data-cookies-action='acceptAll']"))).click()
+        except TimeoutException:
+            pass
 
     with open("tdtc_cookies.json", "w") as f:
         json.dump(dr.get_cookies(), f)
 
     # Start the process of searching for coverage data
     wt.until(ec.element_to_be_clickable((By.ID, "cp"))).send_keys(str(cp))
-
+    # logger.info(f"writting postal code: {cp}")
     wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
+    # logger.info("clicking search button")
 
     try:
-        ret_cp, ret_pb, ordered_data = extract_coverage_tdt(dr, wt)
-
+        wt.until(ec.presence_of_element_located((By.XPATH, '//span[.="El texto introducido no corresponde a ningún Código Postal"]')))
         return {
             "Postal code": cp,
-            "Populations":
-                [{"Population": ret_pb,
-                  "Data": ordered_data}]
-        }, dr, wt
-
-    # If TimeoutException occurs, it means there are multiple populations for the postal code
-    except TimeoutException:
-        num_options = len(wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option"))))
-
-        json_data = {
-            "Postal code": cp,
             "Populations": []
-        }
+        }, dr, wt
+    except TimeoutException:
+        try:
+            ret_cp, ret_pb, ordered_data = extract_coverage_tdt(dr, wt)
+            logger.info(f"single population: {cp}")
+            return {
+                "Postal code": cp,
+                "Populations":
+                    [{"Population": ret_pb,
+                    "Data": ordered_data}]
+            }, dr, wt
 
-        logger.info(f"Found {num_options} population options for postal code {cp}")
-        for num in range(num_options):
-            selector = wt.until(ec.presence_of_element_located((By.ID, "cmbPoblaciones")))
-            options = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option")))
-            option = options[num]
-            logger.info(f"Processing option {num + 1}/{num_options}: {option.text}")
-            selector.click()
-            option.click()
-            wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
-            time.sleep(.2)
+        # If TimeoutException occurs, it means there are multiple populations for the postal code
+        except TimeoutException:
             try:
-                cp_ret, pb_ret, ordered_data = extract_coverage_tdt(dr, wt)
-                json_data["Populations"].append({
-                    "Population": pb_ret,
-                    "Data": ordered_data
-                })
-                logger.debug(f"Successfully processed population: {pb_ret}")
-            except Exception as e:
-                logger.error(f"Error processing population option {option.text}: {str(e)}")
-            time.sleep(.1)
-            dr.execute_script("window.history.back();")
-        logger.debug(f"Final data for postal code {cp}: {json.dumps(json_data, ensure_ascii=False, indent=2)}")
-        return json_data, dr, wt
+                num_options = len(wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option"))))
+            # This postal code has no populations
+            except TimeoutException:
+                logger.info(f"no population: {cp}")
+                return {
+                    "Postal code": cp,
+                    "Populations": []
+                }, dr, wt
+            
+            json_data = {
+                "Postal code": cp,
+                "Populations": []
+            }
+
+            logger.info(f"Found {num_options} population options for postal code {cp}")
+            for num in range(num_options):
+                selector = wt.until(ec.presence_of_element_located((By.ID, "cmbPoblaciones")))
+                options = wt.until(ec.presence_of_all_elements_located((By.CSS_SELECTOR, "option")))
+                option = options[num]
+                logger.info(f"Processing option {num + 1}/{num_options}: {option.text}")
+                selector.click()
+                option.click()
+                wt.until(ec.element_to_be_clickable((By.ID, "btnBuscar"))).click()
+                time.sleep(.15)
+                try:
+                    cp_ret, pb_ret, ordered_data = extract_coverage_tdt(dr, wt)
+                    json_data["Populations"].append({
+                        "Population": pb_ret,
+                        "Data": ordered_data
+                    })
+                    logger.debug(f"Successfully processed population: {pb_ret}")
+                except Exception as e:
+                    logger.error(f"Error processing population option {option.text}: {str(e)}")
+                time.sleep(.1)
+                dr.execute_script("window.history.back();")
+            logger.debug(f"Final data for postal code {cp}: {json.dumps(json_data, ensure_ascii=False, indent=2)}")
+            logger.info(f"multiple populations: {cp}")
+            return json_data, dr, wt
 
 
 def get_all_coverage_data(output_file: str,
@@ -237,7 +277,7 @@ def get_all_coverage_data(output_file: str,
     assert end < 53000, "End postal code must be less than 53000"
 
     # Initialize drivers for the first time
-    _, drr, wtt = coverage_tdt("01006")
+    _, drr, wtt = coverage_tdt("09999")
 
     with open(output_file, "a", encoding="utf-8") as f:  # Open file in append mode
 
@@ -251,19 +291,28 @@ def get_all_coverage_data(output_file: str,
             with open(progress_file, "w", encoding="utf-8") as progress_f:
                 progress_f.write(str(postal_code))
 
-            try:
-                logger.info(f"Processing postal code: {postal_code_str}")
-                data, drr, wtt = coverage_tdt(postal_code_str, drivers=(drr, wtt))
+            # try:
+            logger.info(f"Processing postal code: {postal_code_str}")
+            data, drr, wtt = coverage_tdt(postal_code_str, drivers=(drr, wtt))
+            # logger.debug(f"Data for postal code: {data}")
+            if data["Populations"]:
+                # Write the data to the file as a JSON object
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                logger.info(f"data for postal code: {data}")
+                logger.info(f"Successfully processed and saved data for postal code: {postal_code_str}")
 
-                if data:
-                    # Write the data to the file as a JSON object
-                    f.write(json.dumps(data, ensure_ascii=False) + "\n")
-                    logger.info(f"Successfully processed and saved data for postal code: {postal_code_str}")
+            # except TimeoutException:
+            #     logger.warning(f"Timeout while processing postal code: {postal_code_str}. Skipping...")
+            # except Exception as e:
+            #     logger.error(f"Unexpected error processing postal code {postal_code_str}: {str(e)}")
 
-            except TimeoutException:
-                logger.warning(f"Timeout while processing postal code: {postal_code_str}. Skipping...")
-            except Exception as e:
-                logger.error(f"Unexpected error processing postal code {postal_code_str}: {str(e)}")
 
     logger.info(f"Data collection completed. Results saved to {os.path.abspath(output_file)}")
     logger.info(f"Logs are available in {os.path.abspath('tdtc.log')}")
+
+if __name__ == "__main__":
+    import sys
+
+    postal_code_data = sys.argv[1] if len(sys.argv) > 1 else exit(1)
+    pprint.pprint(coverage_tdt(postal_code_data))
+    

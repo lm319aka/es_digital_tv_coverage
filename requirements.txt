@@ -1,4 +1,9 @@
-selenium~=4.33.0
-chromedriver-autoinstaller~=0.6.4
-undetected-chromedriver~=3.5.5
+# selenium~=4.33.0
+# chromedriver-autoinstaller~=0.6.4
+# undetected-chromedriver~=3.5.5
+
+selenium
+chromedriver-autoinstaller
+# undetected-chromedriver
+git+https://github.com/ultrafunkamsterdam/undetected-chromedriver
 git+https://github.com/lm319aka/init_selenium.git

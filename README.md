@@ -20,7 +20,7 @@ This Python script allows you to check Digital Terrestrial Television (DTT) cove
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/es_digital_tv_coverage.git
+   git clone https://github.com/lm319aka/es_digital_tv_coverage.git
    cd es_digital_tv_coverage
    ```
 
@@ -28,6 +28,7 @@ This Python script allows you to check Digital Terrestrial Television (DTT) cove
    ```
    pip install -r requirements.txt
    ```
+##### PD: Maybe you could have problems with undetectable_chromedriver because of incompatibility of libraries if a version taht uses deprecated libraries is installed. If that is the case, you can try to clone the newer version of undetected_chromedriver from github and install it manually.
 
 ## Usage
 
@@ -44,7 +45,7 @@ print(coverage_data)
 driver.quit()
 ```
 
-### Batch Process Multiple Postal Codes
+### Batch Process Multiple Postal Codes range
 
 ```python
 from tdtc import get_all_coverage_data
@@ -63,7 +64,7 @@ get_all_coverage_data(
 You can also run the script directly to check a single postal code:
 
 ```bash
-python tdtc.py
+python tdtc.py 08007
 ```
 
 ## Output Format
