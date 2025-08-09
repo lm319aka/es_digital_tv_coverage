@@ -6,7 +6,7 @@ This Python script allows you to check Digital Terrestrial Television (DTT) cove
 
 - Check DTT coverage for any valid Spanish postal code
 - Batch process multiple postal codes with progress tracking
-- Save results in JSONL format for easy processing
+- Save results in JSONL format on txt file for easy processing
 - Resume interrupted operations from the last processed postal code
 - Option to reuse browser sessions for better performance
 
@@ -19,16 +19,31 @@ This Python script allows you to check Digital Terrestrial Television (DTT) cove
 ## Installation
 
 1. Clone this repository:
-   ```
+
+   ```bash
    git clone https://github.com/lm319aka/es_digital_tv_coverage.git
    cd es_digital_tv_coverage
    ```
 
-2. Install the required Python packages:
+2. Create a virtual environment (venv) to manage libraries:
+
+   ```bash
+   python -m venv .venv
    ```
+
+3. Activate the virtual environment:
+
+   ```bash
+   .venv/bin/activate
+   ```
+
+4. Install the required Python packages:
+
+   ```bash
    pip install -r requirements.txt
    ```
-##### PD: Maybe you could have problems with undetectable_chromedriver because of incompatibility of libraries if a version taht uses deprecated libraries is installed. If that is the case, you can try to clone the newer version of undetected_chromedriver from github and install it manually.
+
+### PD: Maybe you could have problems with undetectable_chromedriver because of incompatibility of libraries if a version that uses deprecated libraries is installed. If that is the case, you can try to clone the newer version of undetected_chromedriver from github and install it manually
 
 ## Usage
 

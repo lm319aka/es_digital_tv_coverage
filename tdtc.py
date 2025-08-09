@@ -314,5 +314,7 @@ if __name__ == "__main__":
     import sys
 
     postal_code_data = sys.argv[1] if len(sys.argv) > 1 else exit(1)
-    pprint.pprint(coverage_tdt(postal_code_data))
-    
+    info, dr, wt = coverage_tdt(postal_code_data)
+    pprint.pprint(info)
+    input("Press Enter to exit...")
+    dr.quit()

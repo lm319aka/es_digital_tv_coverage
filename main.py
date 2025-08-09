@@ -8,12 +8,12 @@ import csv
 
 # Define the postal code ranges for each province in Castilla y León
 province_codes = {
-    # "Ávila": ["05471", "05999"],
-    # "Burgos": ["09000", "09999"],
-    # "León": ["24000", "24999"],
-    # "Palencia": ["34486", "34999"],
-    # "Salamanca": ["37114", "37999"],
-    # "Segovia": ["40233", "40999"],
+    "Ávila": ["05000", "05999"],
+    "Burgos": ["09000", "09999"],
+    "León": ["24000", "24999"],
+    "Palencia": ["34000", "34999"],
+    "Salamanca": ["37000", "37999"],
+    "Segovia": ["40000", "40999"],
     "Soria": ["42000", "42999"],
     "Valladolid": ["47000", "47999"],
     "Zamora": ["49000", "49999"]
