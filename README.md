@@ -34,10 +34,10 @@ This Python script allows you to check Digital Terrestrial Television (DTT) cove
 3. Activate the virtual environment:
 
    ```bash
-   .venv/bin/activate
+   .venv/Scripts/activate   
    ```
 
-4. Install the required Python packages:
+4. Install the required Python packages (you must be in es_digital_tv_coverage directory for this to work):
 
    ```bash
    pip install -r requirements.txt
